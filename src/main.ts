@@ -718,11 +718,20 @@ function setupUI() {
   const btnToggleWidth = document.getElementById("btn-toggle-width")!;
   const widthLabel = document.getElementById("width-label")!;
   btnToggleWidth.addEventListener("click", () => {
-    previewEl.classList.toggle("wide-preview");
-    if (previewEl.classList.contains("wide-preview")) {
+    if (!previewEl.classList.contains("wide-preview") && !previewEl.classList.contains("full-preview")) {
+      // 標準幅 -> 広い幅
+      previewEl.classList.add("wide-preview");
       widthLabel.textContent = "広い幅";
       btnToggleWidth.classList.add("active");
+    } else if (previewEl.classList.contains("wide-preview")) {
+      // 広い幅 -> フル幅
+      previewEl.classList.remove("wide-preview");
+      previewEl.classList.add("full-preview");
+      widthLabel.textContent = "フル幅";
+      btnToggleWidth.classList.add("active");
     } else {
+      // フル幅 -> 標準幅
+      previewEl.classList.remove("full-preview");
       widthLabel.textContent = "標準幅";
       btnToggleWidth.classList.remove("active");
     }
