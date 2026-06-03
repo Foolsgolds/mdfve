@@ -49,7 +49,11 @@ let btnCloseSidebarBottomEl: HTMLElement;
 // Markdown レンダリング ＆ 統計情報更新
 // ==========================================
 async function renderMarkdown() {
-  const markdownText = editorEl.value;
+  let markdownText = editorEl.value;
+  // BOM (Byte Order Mark) を除去
+  if (markdownText.startsWith("\uFEFF")) {
+    markdownText = markdownText.slice(1);
+  }
   // marked で HTML を生成
   const htmlContent = await marked.parse(markdownText);
   previewEl.innerHTML = htmlContent;
@@ -435,7 +439,11 @@ async function handleOpenFile() {
     });
 
     if (selected && typeof selected === "string") {
-      const content = await readTextFile(selected);
+      let content = await readTextFile(selected);
+      // BOM (Byte Order Mark) を除去
+      if (content.startsWith("\uFEFF")) {
+        content = content.slice(1);
+      }
       editorEl.value = content;
       currentFilePath = selected;
       markAsDirty(false);
