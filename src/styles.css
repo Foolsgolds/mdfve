@@ -1058,6 +1058,11 @@ button:active {
   width: 100%;
 }
 
+.section-content {
+  padding-left: 26px;
+  box-sizing: border-box;
+}
+
 .collapsible-header {
   display: flex;
   align-items: center;
