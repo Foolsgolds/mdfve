@@ -1068,7 +1068,7 @@ button:active {
   align-items: center;
   cursor: pointer;
   position: relative;
-  user-select: none;
+  user-select: text;
   width: 100%;
   box-sizing: border-box;
 }

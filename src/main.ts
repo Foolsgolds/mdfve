@@ -158,6 +158,17 @@ function restructurePreviewDOM() {
       // ヘッダーのクリックで折り畳みを切り替える
       el.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest("a")) return;
+
+        // 折り畳み用矢印をクリックした場合は選択状態に関わらずトグルする
+        const isChevron = (e.target as HTMLElement).closest(".fold-chevron") !== null;
+        if (!isChevron) {
+          // テキスト選択中、またはドラッグ選択動作を行った場合はトグルしない
+          const selection = window.getSelection();
+          if (selection && selection.toString().trim() !== "") {
+            return;
+          }
+        }
+
         e.preventDefault();
         e.stopPropagation();
         togglePreviewHeadingCollapse(currentPath);
