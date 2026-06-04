@@ -111,10 +111,6 @@
             <div class="popup-divider"></div>
             <div class="popup-section">
               <span class="section-title">プレビュー設定</span>
-              <button id="btn-toggle-width" class="popup-item" title="表示幅の切り替え (標準 / 広い / フル)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M4 12l4-4m-4 4l4 4m12-4l-4-4m4 4l-4 4"/></svg>
-                <span id="width-label">標準幅</span>
-              </button>
               <button id="btn-toggle-outline" class="popup-item" title="目次の表示/非表示">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 <span>目次を表示</span>
@@ -122,6 +118,19 @@
             </div>
           </div>
           <button id="btn-menu-view" class="circle-btn" title="表示設定 (V)">V</button>
+        </div>
+
+        <!-- 表示幅設定 (W) -->
+        <div class="menu-item-container">
+          <div id="popup-width" class="menu-popup hidden">
+            <div class="popup-section">
+              <span class="section-title">プレビュー幅</span>
+              <button id="btn-width-standard" class="popup-item" title="標準幅 (800px)">標準幅</button>
+              <button id="btn-width-wide" class="popup-item" title="広い幅 (1200px)">広い幅</button>
+              <button id="btn-width-full" class="popup-item" title="フル幅 (100%)">フル幅</button>
+            </div>
+          </div>
+          <button id="btn-menu-width" class="circle-btn" title="表示幅設定 (W)">W</button>
         </div>
 
         <!-- テーマ設定 (T) -->

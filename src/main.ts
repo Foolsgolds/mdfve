@@ -540,19 +540,23 @@ function setupUI() {
   // フローティングポップアップメニューの表示制御
   const btnMenuFile = document.getElementById("btn-menu-file")!;
   const btnMenuView = document.getElementById("btn-menu-view")!;
+  const btnMenuWidth = document.getElementById("btn-menu-width")!;
   const btnMenuTheme = document.getElementById("btn-menu-theme")!;
 
   const popupFile = document.getElementById("popup-file")!;
   const popupView = document.getElementById("popup-view")!;
+  const popupWidth = document.getElementById("popup-width")!;
   const popupTheme = document.getElementById("popup-theme")!;
 
   const closeAllPopups = () => {
     popupFile.classList.add("hidden");
     popupView.classList.add("hidden");
+    popupWidth.classList.add("hidden");
     popupTheme.classList.add("hidden");
 
     btnMenuFile.classList.remove("active");
     btnMenuView.classList.remove("active");
+    btnMenuWidth.classList.remove("active");
     btnMenuTheme.classList.remove("active");
   };
 
@@ -575,6 +579,11 @@ function setupUI() {
     togglePopup(popupView, btnMenuView);
   });
 
+  btnMenuWidth.addEventListener("click", (e) => {
+    e.stopPropagation();
+    togglePopup(popupWidth, btnMenuWidth);
+  });
+
   btnMenuTheme.addEventListener("click", (e) => {
     e.stopPropagation();
     togglePopup(popupTheme, btnMenuTheme);
@@ -583,6 +592,7 @@ function setupUI() {
   // ポップアップ自体のクリックで閉じないように制御
   popupFile.addEventListener("click", (e) => e.stopPropagation());
   popupView.addEventListener("click", (e) => e.stopPropagation());
+  popupWidth.addEventListener("click", (e) => e.stopPropagation());
   popupTheme.addEventListener("click", (e) => e.stopPropagation());
 
   // 画面全体のクリックでポップアップを閉じる
@@ -593,7 +603,7 @@ function setupUI() {
   // 各ポップアップ内アイテムがクリックされたらポップアップを閉じる (トグルボタン以外)
   const popupItems = document.querySelectorAll(".popup-item");
   popupItems.forEach(item => {
-    if (item.id === "btn-toggle-width" || item.id === "btn-toggle-outline") {
+    if (item.id === "btn-toggle-outline") {
       return;
     }
     item.addEventListener("click", () => {
@@ -722,28 +732,34 @@ function setupUI() {
   activeThemeEl.textContent = "ライトテーマ";
   document.querySelector('.theme-option[data-theme="theme-light"]')?.classList.add("active");
 
-  // 表示幅切り替え (プレビュー用)
-  const btnToggleWidth = document.getElementById("btn-toggle-width")!;
-  const widthLabel = document.getElementById("width-label")!;
-  btnToggleWidth.addEventListener("click", () => {
-    if (!previewEl.classList.contains("wide-preview") && !previewEl.classList.contains("full-preview")) {
-      // 標準幅 -> 広い幅
+  // 表示幅設定 (W) の制御
+  const btnWidthStandard = document.getElementById("btn-width-standard")!;
+  const btnWidthWide = document.getElementById("btn-width-wide")!;
+  const btnWidthFull = document.getElementById("btn-width-full")!;
+
+  const setPreviewWidth = (width: "standard" | "wide" | "full") => {
+    previewEl.classList.remove("wide-preview", "full-preview");
+    btnWidthStandard.classList.remove("active");
+    btnWidthWide.classList.remove("active");
+    btnWidthFull.classList.remove("active");
+
+    if (width === "standard") {
+      btnWidthStandard.classList.add("active");
+    } else if (width === "wide") {
       previewEl.classList.add("wide-preview");
-      widthLabel.textContent = "広い幅";
-      btnToggleWidth.classList.add("active");
-    } else if (previewEl.classList.contains("wide-preview")) {
-      // 広い幅 -> フル幅
-      previewEl.classList.remove("wide-preview");
+      btnWidthWide.classList.add("active");
+    } else if (width === "full") {
       previewEl.classList.add("full-preview");
-      widthLabel.textContent = "フル幅";
-      btnToggleWidth.classList.add("active");
-    } else {
-      // フル幅 -> 標準幅
-      previewEl.classList.remove("full-preview");
-      widthLabel.textContent = "標準幅";
-      btnToggleWidth.classList.remove("active");
+      btnWidthFull.classList.add("active");
     }
-  });
+  };
+
+  btnWidthStandard.addEventListener("click", () => setPreviewWidth("standard"));
+  btnWidthWide.addEventListener("click", () => setPreviewWidth("wide"));
+  btnWidthFull.addEventListener("click", () => setPreviewWidth("full"));
+
+  // デフォルトとして標準幅をアクティブにする
+  setPreviewWidth("standard");
 
   // ドラッグリサイズバーの実装
   const dragBar = document.getElementById("drag-bar")!;
