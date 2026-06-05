@@ -23,6 +23,12 @@
   --code-bg: #1e1e24;
   --quote-bg: rgba(59, 130, 246, 0.05);
   --active-btn-bg: #2d2d34;
+  --tab-bg: #1a1a1e;
+  --tab-active-bg: #121214;
+  --tab-hover-bg: #242429;
+  --tab-border: #2f2f35;
+  --tab-text: #a1a1aa;
+  --tab-text-active: #3b82f6;
 }
 
 /* テーマ: ライト */
@@ -44,6 +50,12 @@
   --code-bg: #f0f2f5;
   --quote-bg: rgba(37, 99, 235, 0.05);
   --active-btn-bg: #e5e7eb;
+  --tab-bg: #f3f4f6;
+  --tab-active-bg: #ffffff;
+  --tab-hover-bg: #e5e7eb;
+  --tab-border: #e5e7eb;
+  --tab-text: #4b5563;
+  --tab-text-active: #2563eb;
 }
 
 /* テーマ: セピア (目に優しい紙風) */
@@ -65,6 +77,12 @@
   --code-bg: #ede1c5;
   --quote-bg: rgba(160, 82, 45, 0.05);
   --active-btn-bg: #d7c59a;
+  --tab-bg: #ebdcb9;
+  --tab-active-bg: #fbf0d9;
+  --tab-hover-bg: #ede1c5;
+  --tab-border: #d7c59a;
+  --tab-text: #8b5a2b;
+  --tab-text-active: #a0522d;
 }
 
 /* テーマ: サイバーパンク (ハイコントラスト ネオン) */
@@ -86,6 +104,12 @@
   --code-bg: #1b1c2b;
   --quote-bg: rgba(255, 0, 127, 0.1);
   --active-btn-bg: #2c1a30;
+  --tab-bg: #171821;
+  --tab-active-bg: #0d0e15;
+  --tab-hover-bg: #20222f;
+  --tab-border: #ff007f;
+  --tab-text: #ff007f;
+  --tab-text-active: #00ffcc;
 }
 
 /* ==========================================
@@ -1047,4 +1071,274 @@ button:active {
 .markdown-section-wrapper.collapsed > .collapsible-header .fold-chevron svg {
   transform: rotate(0deg);
 }
+
+/* ==========================================
+   タブバー関連のスタイル
+   ========================================== */
+.tab-container {
+  height: 27px;
+  background-color: var(--tab-bg);
+  border-bottom: 1px solid var(--tab-border);
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+  z-index: 10;
+  user-select: none;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.tab-bar {
+  display: flex;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+}
+
+/* スクロールバー非表示 (Chrome, Safari, Edge, Firefox) */
+.tab-bar::-webkit-scrollbar {
+  display: none;
+}
+.tab-bar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 100%;
+  background-color: var(--tab-bg);
+  border-right: 1px solid var(--tab-border);
+  color: var(--tab-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 180px;
+  min-width: 90px;
+  position: relative;
+  transition: background-color 0.2s, color 0.2s;
+  box-sizing: border-box;
+}
+
+.tab:hover {
+  background-color: var(--tab-hover-bg);
+  color: var(--text-primary);
+}
+
+.tab.active {
+  background-color: var(--tab-active-bg);
+  color: var(--tab-text-active);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent-color);
+  height: 100%;
+}
+
+.tab-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tab-text);
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  padding: 0;
+}
+
+.tab-close-btn:hover {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
+}
+
+.tab-close-btn svg {
+  display: block;
+}
+
+/* 未保存時のドット表示 */
+.tab-dirty-dot {
+  display: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.tab.is-dirty .tab-dirty-dot {
+  display: block;
+}
+
+.tab.is-dirty .tab-close-btn svg {
+  display: none;
+}
+
+.tab.is-dirty:hover .tab-dirty-dot {
+  display: none;
+}
+
+.tab.is-dirty:hover .tab-close-btn svg {
+  display: block;
+}
+
+/* 新規タブ追加ボタン */
+.add-tab-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--tab-text);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.add-tab-btn:hover {
+  background-color: var(--tab-hover-bg);
+  color: var(--accent-color);
+}
+
+/* ==========================================
+   カスタム確認ダイアログ
+   ========================================== */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.dialog-overlay.hidden {
+  display: none !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dialog-box {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  width: 440px;
+  max-width: 90%;
+  box-shadow: 0 20px 40px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: dialog-show 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes dialog-show {
+  from {
+    transform: scale(0.92) translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.dialog-header h4 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dialog-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.dialog-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dialog-btn.primary {
+  background-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.dialog-btn.primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.dialog-btn.secondary {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dialog-btn.secondary:hover {
+  background-color: var(--active-btn-bg);
+}
+
+.dialog-btn.text {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.dialog-btn.text:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+}
+
+/* サイバーパンクテーマの追加調整 */
+.theme-cyberpunk .dialog-box {
+  box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+}
+.theme-cyberpunk .dialog-btn.primary {
+  background-color: #ff007f;
+  color: #000;
+  font-weight: bold;
+}
+.theme-cyberpunk .dialog-btn.primary:hover {
+  background-color: #ffff00;
+}
+.theme-cyberpunk .tab.active {
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.3);
+}
+
 

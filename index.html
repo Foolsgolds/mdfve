@@ -10,7 +10,18 @@
 
   <body>
     <div id="app">
-
+      <!-- タブバー -->
+      <div id="tab-container" class="tab-container">
+        <div id="tab-bar" class="tab-bar">
+          <!-- タブが動的に生成されます -->
+        </div>
+        <button id="btn-add-tab" class="add-tab-btn" title="新しいタブを開く">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
 
       <!-- メインワークスペース -->
       <div class="workspace">
@@ -162,6 +173,23 @@
           <span id="active-theme">ダークテーマ</span>
         </div>
       </footer>
+    </div>
+
+    <!-- カスタム確認ダイアログ -->
+    <div id="custom-dialog-overlay" class="dialog-overlay hidden">
+      <div class="dialog-box">
+        <div class="dialog-header">
+          <h4 id="dialog-title">確認</h4>
+        </div>
+        <div class="dialog-body">
+          <p id="dialog-message">変更内容を保存しますか？</p>
+        </div>
+        <div class="dialog-footer">
+          <button id="btn-dialog-save" class="dialog-btn primary">保存する</button>
+          <button id="btn-dialog-discard" class="dialog-btn secondary">保存せずに閉じる</button>
+          <button id="btn-dialog-cancel" class="dialog-btn text">キャンセル</button>
+        </div>
+      </div>
     </div>
   </body>
 </html>

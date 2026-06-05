@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open, save, ask } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { marked } from "marked";
 import Prism from "prismjs";
@@ -14,8 +14,23 @@ import "prismjs/components/prism-bash";
 import "prismjs/components/prism-markdown";
 
 // ==========================================
-// 状態管理用変数
+// 状態管理用変数 ＆ タブ定義
 // ==========================================
+interface Tab {
+  id: string;
+  filePath: string | null;
+  title: string;
+  content: string;
+  isDirty: boolean;
+  editorScrollTop: number;
+  previewScrollTop: number;
+  collapsedTOCHeadings: Set<string>;
+  collapsedPreviewHeadings: Set<string>;
+}
+
+let tabs: Tab[] = [];
+let activeTabId: string | null = null;
+
 let currentFilePath: string | null = null;
 let isDirty = false;
 let isAutosaveEnabled = true;
@@ -24,6 +39,9 @@ let autoSaveTimeout: number | undefined;
 // 折り畳み状態管理用のSet (階層パス level:見出し名 をキーにする)
 const collapsedTOCHeadings = new Set<string>();
 const collapsedPreviewHeadings = new Set<string>();
+
+// ダイアログのプロミス解決用リゾルバ
+let closeDialogResolve: ((value: "save" | "discard" | "cancel") => void) | null = null;
 
 // DOM 要素への参照
 let editorEl: HTMLTextAreaElement;
@@ -201,6 +219,7 @@ function togglePreviewHeadingCollapse(path: string) {
   if (previewWrapper) {
     previewWrapper.classList.toggle("collapsed", collapsedPreviewHeadings.has(path));
   }
+  syncGlobalsToActiveTabState();
 }
 
 function toggleTOCHeadingCollapse(path: string) {
@@ -210,6 +229,7 @@ function toggleTOCHeadingCollapse(path: string) {
     collapsedTOCHeadings.add(path);
   }
   updateOutline();
+  syncGlobalsToActiveTabState();
 }
 
 function updateStats() {
@@ -391,42 +411,296 @@ function updateOutline() {
 // ==========================================
 // ファイル入出力処理
 // ==========================================
+// ==========================================
+// ファイル入出力 ＆ タブ操作処理
+// ==========================================
 async function saveFileContent(path: string) {
   const content = editorEl.value;
   await writeTextFile(path, content);
 }
 
-async function handleNewFile() {
-  if (isDirty) {
-    const confirmDiscard = await ask("未保存の変更があります。変更を破棄して新しいファイルを作成しますか？", {
-      title: "確認",
-      kind: "warning",
-      okLabel: "はい",
-      cancelLabel: "いいえ"
-    });
-    if (!confirmDiscard) return;
+function getNextUntitledName(): string {
+  let count = 1;
+  while (true) {
+    const name = count === 1 ? "無題.md" : `無題 ${count}.md`;
+    if (!tabs.some(t => t.title === name)) {
+      return name;
+    }
+    count++;
+  }
+}
+
+function createTab(filePath: string | null = null, content: string = "", title: string | null = null): Tab {
+  const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  
+  let tabTitle = title;
+  if (!tabTitle) {
+    if (filePath) {
+      tabTitle = filePath.split(/[/\\]/).pop() || "無題.md";
+    } else {
+      tabTitle = getNextUntitledName();
+    }
   }
 
-  editorEl.value = "";
-  currentFilePath = null;
-  markAsDirty(false);
-  updateFileTitle();
-  renderMarkdown();
+  const tab: Tab = {
+    id,
+    filePath,
+    title: tabTitle,
+    content,
+    isDirty: false,
+    editorScrollTop: 0,
+    previewScrollTop: 0,
+    collapsedTOCHeadings: new Set<string>(),
+    collapsedPreviewHeadings: new Set<string>()
+  };
+
+  tabs.push(tab);
+  return tab;
+}
+
+function syncActiveTabStateToGlobals() {
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  if (!activeTab) return;
+
+  currentFilePath = activeTab.filePath;
+  isDirty = activeTab.isDirty;
+  editorEl.value = activeTab.content;
+
+  collapsedTOCHeadings.clear();
+  activeTab.collapsedTOCHeadings.forEach(h => collapsedTOCHeadings.add(h));
+
+  collapsedPreviewHeadings.clear();
+  activeTab.collapsedPreviewHeadings.forEach(h => collapsedPreviewHeadings.add(h));
+}
+
+function syncGlobalsToActiveTabState() {
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  if (!activeTab) return;
+
+  activeTab.filePath = currentFilePath;
+  activeTab.isDirty = isDirty;
+  activeTab.content = editorEl.value;
+  
+  if (currentFilePath) {
+    activeTab.title = currentFilePath.split(/[/\\]/).pop() || "無題.md";
+  }
+
+  activeTab.collapsedTOCHeadings = new Set(collapsedTOCHeadings);
+  activeTab.collapsedPreviewHeadings = new Set(collapsedPreviewHeadings);
+  activeTab.editorScrollTop = editorEl.scrollTop;
+  activeTab.previewScrollTop = previewPaneEl.scrollTop;
+}
+
+function renderTabs() {
+  const tabBar = document.getElementById("tab-bar");
+  if (!tabBar) return;
+  tabBar.innerHTML = "";
+
+  tabs.forEach(tab => {
+    const tabEl = document.createElement("div");
+    tabEl.className = `tab${tab.id === activeTabId ? " active" : ""}${tab.isDirty ? " is-dirty" : ""}`;
+    tabEl.dataset.tabId = tab.id;
+
+    // タブタイトル
+    const titleEl = document.createElement("span");
+    titleEl.className = "tab-title";
+    titleEl.textContent = tab.title;
+    titleEl.title = tab.filePath || tab.title;
+    tabEl.appendChild(titleEl);
+
+    // 未保存時のドット
+    const dirtyDot = document.createElement("span");
+    dirtyDot.className = "tab-dirty-dot";
+    tabEl.appendChild(dirtyDot);
+
+    // 閉じるボタン
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tab-close-btn";
+    closeBtn.title = "タブを閉じる";
+    closeBtn.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    `;
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleCloseTab(tab.id);
+    });
+    tabEl.appendChild(closeBtn);
+
+    // クリックでタブ切り替え
+    tabEl.addEventListener("click", () => {
+      if (tab.id !== activeTabId) {
+        switchTab(tab.id);
+      }
+    });
+
+    tabBar.appendChild(tabEl);
+  });
+}
+
+async function switchTab(tabId: string) {
+  if (tabId === activeTabId) return;
+
+  // 1. 現在のタブの未保存オートセーブがあれば実行
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = undefined;
+    if (currentFilePath && isDirty) {
+      try {
+        await saveFileContent(currentFilePath);
+        markAsDirty(false);
+      } catch (e) {
+        console.error("Save on switch failed", e);
+      }
+    }
+  }
+
+  // 2. 現在のタブの状態を保存
+  syncGlobalsToActiveTabState();
+
+  // 3. アクティブタブIDの更新
+  activeTabId = tabId;
+
+  // 4. 新しいタブの状態をロード
+  syncActiveTabStateToGlobals();
+
+  // 5. 表示更新
+  await renderMarkdown();
   updateStats();
+  markAsDirty(isDirty);
+  renderTabs();
+
+  // 6. スクロール位置の復元 (レンダリング完了後)
+  const targetTab = tabs.find(t => t.id === tabId);
+  if (targetTab) {
+    editorEl.scrollTop = targetTab.editorScrollTop;
+    previewPaneEl.scrollTop = targetTab.previewScrollTop;
+  }
+
+  // エディタにフォーカス
   editorEl.focus();
 }
 
-async function handleOpenFile() {
-  if (isDirty) {
-    const confirmDiscard = await ask("未保存の変更があります。変更を破棄して別のファイルを開きますか？", {
-      title: "確認",
-      kind: "warning",
-      okLabel: "はい",
-      cancelLabel: "いいえ"
-    });
-    if (!confirmDiscard) return;
+function setupDialogEvents() {
+  const btnSave = document.getElementById("btn-dialog-save")!;
+  const btnDiscard = document.getElementById("btn-dialog-discard")!;
+  const btnCancel = document.getElementById("btn-dialog-cancel")!;
+  const overlay = document.getElementById("custom-dialog-overlay")!;
+
+  btnSave.addEventListener("click", () => {
+    if (closeDialogResolve) {
+      closeDialogResolve("save");
+      closeDialogResolve = null;
+      overlay.classList.add("hidden");
+    }
+  });
+
+  btnDiscard.addEventListener("click", () => {
+    if (closeDialogResolve) {
+      closeDialogResolve("discard");
+      closeDialogResolve = null;
+      overlay.classList.add("hidden");
+    }
+  });
+
+  btnCancel.addEventListener("click", () => {
+    if (closeDialogResolve) {
+      closeDialogResolve("cancel");
+      closeDialogResolve = null;
+      overlay.classList.add("hidden");
+    }
+  });
+}
+
+function showCloseConfirmDialog(fileName: string): Promise<"save" | "discard" | "cancel"> {
+  return new Promise((resolve) => {
+    closeDialogResolve = resolve;
+    const overlay = document.getElementById("custom-dialog-overlay")!;
+    const messageEl = document.getElementById("dialog-message")!;
+    messageEl.textContent = `「${fileName}」への変更内容を保存しますか？\n保存しない場合、変更は失われます。`;
+    overlay.classList.remove("hidden");
+  });
+}
+
+async function handleCloseTab(tabId: string) {
+  const tabIndex = tabs.findIndex(t => t.id === tabId);
+  if (tabIndex === -1) return;
+
+  const tab = tabs[tabIndex];
+
+  if (tabId === activeTabId) {
+    syncGlobalsToActiveTabState();
   }
 
+  if (tab.isDirty) {
+    const choice = await showCloseConfirmDialog(tab.title);
+    if (choice === "cancel") {
+      return;
+    } else if (choice === "save") {
+      if (tab.filePath) {
+        try {
+          await writeTextFile(tab.filePath, tab.content);
+          tab.isDirty = false;
+        } catch (e) {
+          console.error("Failed to save file before closing", e);
+          return;
+        }
+      } else {
+        const prevActiveId = activeTabId;
+        await switchTab(tabId);
+        await handleSaveAsFile();
+        
+        syncGlobalsToActiveTabState();
+        if (tab.isDirty) {
+          if (prevActiveId && prevActiveId !== tabId) {
+            await switchTab(prevActiveId);
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  if (tabId === activeTabId && autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = undefined;
+  }
+
+  tabs.splice(tabIndex, 1);
+
+  if (tabs.length === 0) {
+    const newTab = createTab();
+    activeTabId = newTab.id;
+    syncActiveTabStateToGlobals();
+    await renderMarkdown();
+    updateStats();
+    markAsDirty(false);
+  } else {
+    if (tabId === activeTabId) {
+      const newActiveIndex = Math.min(tabIndex, tabs.length - 1);
+      const newActiveTab = tabs[newActiveIndex];
+      activeTabId = newActiveTab.id;
+      syncActiveTabStateToGlobals();
+      await renderMarkdown();
+      updateStats();
+      markAsDirty(isDirty);
+      
+      editorEl.scrollTop = newActiveTab.editorScrollTop;
+      previewPaneEl.scrollTop = newActiveTab.previewScrollTop;
+    }
+  }
+
+  renderTabs();
+}
+
+async function handleNewFile() {
+  const newTab = createTab();
+  await switchTab(newTab.id);
+}
+
+async function handleOpenFile() {
   try {
     const selected = await open({
       multiple: false,
@@ -439,17 +713,33 @@ async function handleOpenFile() {
     });
 
     if (selected && typeof selected === "string") {
+      const existingTab = tabs.find(t => t.filePath === selected);
+      if (existingTab) {
+        await switchTab(existingTab.id);
+        return;
+      }
+
       let content = await readTextFile(selected);
-      // BOM (Byte Order Mark) を除去
       if (content.startsWith("\uFEFF")) {
         content = content.slice(1);
       }
-      editorEl.value = content;
-      currentFilePath = selected;
-      markAsDirty(false);
-      updateFileTitle();
-      renderMarkdown();
-      updateStats();
+
+      const activeTab = tabs.find(t => t.id === activeTabId);
+      if (activeTab && tabs.length === 1 && !activeTab.filePath && !activeTab.isDirty && activeTab.content === "") {
+        activeTab.filePath = selected;
+        activeTab.title = selected.split(/[/\\]/).pop() || "無題.md";
+        activeTab.content = content;
+        activeTab.isDirty = false;
+        
+        syncActiveTabStateToGlobals();
+        await renderMarkdown();
+        updateStats();
+        markAsDirty(false);
+        renderTabs();
+      } else {
+        const newTab = createTab(selected, content);
+        await switchTab(newTab.id);
+      }
     }
   } catch (e) {
     console.error("Failed to open file", e);
@@ -465,6 +755,15 @@ async function handleSaveFile() {
   try {
     await saveFileContent(currentFilePath);
     markAsDirty(false);
+    
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (activeTab) {
+      activeTab.isDirty = false;
+      activeTab.title = currentFilePath.split(/[/\\]/).pop() || "無題.md";
+      activeTab.filePath = currentFilePath;
+      activeTab.content = editorEl.value;
+    }
+    renderTabs();
   } catch (e) {
     console.error("Failed to save file", e);
   }
@@ -486,7 +785,17 @@ async function handleSaveAsFile() {
       currentFilePath = path;
       await saveFileContent(path);
       markAsDirty(false);
+      
+      const activeTab = tabs.find(t => t.id === activeTabId);
+      if (activeTab) {
+        activeTab.filePath = path;
+        activeTab.title = path.split(/[/\\]/).pop() || "無題.md";
+        activeTab.isDirty = false;
+        activeTab.content = editorEl.value;
+      }
+      
       updateFileTitle();
+      renderTabs();
     }
   } catch (e) {
     console.error("Failed to save as file", e);
@@ -611,11 +920,15 @@ function setupUI() {
     });
   });
 
-  // ツールバーボタンイベント
+  // ツールバーボタンイベント & タブ関連イベント
   document.getElementById("btn-new")?.addEventListener("click", handleNewFile);
   document.getElementById("btn-open")?.addEventListener("click", handleOpenFile);
   document.getElementById("btn-save")?.addEventListener("click", handleSaveFile);
   document.getElementById("btn-saveas")?.addEventListener("click", handleSaveAsFile);
+  document.getElementById("btn-add-tab")?.addEventListener("click", handleNewFile);
+
+  // ダイアログのイベントセットアップ
+  setupDialogEvents();
 
   // 表示切り替えボタン
   const btnEditor = document.getElementById("btn-view-editor")!;
@@ -789,6 +1102,10 @@ function setupUI() {
     updateStats();
     renderMarkdown();
 
+    // タブの状態も更新
+    syncGlobalsToActiveTabState();
+    renderTabs();
+
     // 自動保存処理
     if (currentFilePath && isAutosaveEnabled) {
       clearTimeout(autoSaveTimeout);
@@ -796,6 +1113,8 @@ function setupUI() {
         try {
           await saveFileContent(currentFilePath!);
           markAsDirty(false);
+          syncGlobalsToActiveTabState();
+          renderTabs();
         } catch (e) {
           console.error("Auto-save failed", e);
           updateAutoSaveStatus("dirty");
@@ -831,8 +1150,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   setupUI();
   setupSyncScroll();
 
+  // 初期タブを作成
+  const initialTab = createTab();
+  activeTabId = initialTab.id;
+  syncActiveTabStateToGlobals();
+
   // 初期プレビュー描画と文字数計算
-  renderMarkdown();
+  await renderMarkdown();
   updateStats();
   updateFileTitle();
+  renderTabs();
 });
