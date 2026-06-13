@@ -1,4 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { marked } from "marked";
@@ -700,6 +702,52 @@ async function handleNewFile() {
   await switchTab(newTab.id);
 }
 
+// 指定パスのファイルをタブで開く (外部起動: emacs 連携などから利用)
+// 既に開いているファイルは内容を再読込してそのタブへ切り替える。
+// preloadedContent が渡された場合はそれを使う (Rust 側で読込済み)。
+async function openFilePath(path: string, preloadedContent?: string) {
+  let content = preloadedContent !== undefined
+    ? preloadedContent
+    : await readTextFile(path);
+  if (content.startsWith("﻿")) {
+    content = content.slice(1);
+  }
+
+  const existingTab = tabs.find(t => t.filePath === path);
+  if (existingTab) {
+    existingTab.content = content;
+    existingTab.isDirty = false;
+    if (existingTab.id === activeTabId) {
+      editorEl.value = content;
+      await renderMarkdown();
+      updateStats();
+      markAsDirty(false);
+      syncGlobalsToActiveTabState();
+    }
+    await switchTab(existingTab.id);
+    renderTabs();
+    return;
+  }
+
+  // 空の初期タブがあれば再利用、なければ新規タブ
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  if (activeTab && tabs.length === 1 && !activeTab.filePath && !activeTab.isDirty && activeTab.content === "") {
+    activeTab.filePath = path;
+    activeTab.title = path.split(/[/\\]/).pop() || "無題.md";
+    activeTab.content = content;
+    activeTab.isDirty = false;
+
+    syncActiveTabStateToGlobals();
+    await renderMarkdown();
+    updateStats();
+    markAsDirty(false);
+    renderTabs();
+  } else {
+    const newTab = createTab(path, content);
+    await switchTab(newTab.id);
+  }
+}
+
 async function handleOpenFile() {
   try {
     const selected = await open({
@@ -1160,4 +1208,32 @@ window.addEventListener("DOMContentLoaded", async () => {
   updateStats();
   updateFileTitle();
   renderTabs();
+
+  // 外部起動 (emacs 連携など) でファイルパスが渡された場合に開く
+  // パスと内容は Rust 側で読み込んで渡される (JS の fs スコープに依存しない)
+  interface OpenedFile { path: string; content: string; }
+
+  // 1. 初回起動: コマンドライン引数のファイル
+  try {
+    const startupFile = await invoke<OpenedFile | null>("get_startup_file");
+    if (startupFile) {
+      await openFilePath(startupFile.path, startupFile.content);
+    }
+  } catch (e) {
+    console.error("Failed to open startup file", e);
+  }
+
+  // 2. 2回目以降の起動: single-instance 経由で届くファイルを新規タブで開く
+  await listen<OpenedFile>("open-file", async (event) => {
+    if (event.payload && event.payload.path) {
+      try {
+        await openFilePath(event.payload.path, event.payload.content);
+        const appWindow = getCurrentWindow();
+        await appWindow.unminimize();
+        await appWindow.setFocus();
+      } catch (e) {
+        console.error("Failed to open forwarded file", e);
+      }
+    }
+  });
 });
