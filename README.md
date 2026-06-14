@@ -50,11 +50,16 @@ emacs の `M-x markdown-preview` の代わりに、編集中のファイルを M
 
 ```elisp
 (load "/path/to/mdfve/emacs/mdfve.el")
-(setq mdfve-executable "/path/to/mdfve/src-tauri/target/release/MDFVE.exe")
+;; スタンドアロン版（npm run tauri build の出力）を指定する
+(setq mdfve-executable "/path/to/mdfve/src-tauri/target/release/tauri-app.exe")
+;; インストーラで導入した場合は: "C:/Program Files/MDFVE/MDFVE.exe"
 ```
 
 markdown-mode のバッファで `C-c C-c p`（`M-x mdfve-preview`）を実行すると、
 バッファを保存して MDFVE がそのファイルをタブで開きます。
+
+> **注意:** 開発ビルド（`target/debug`）は vite 開発サーバーが必要なため、
+> emacs 連携には `npm run tauri build` で生成したスタンドアロン版を使ってください。
 
 - **single-instance 対応** — 2 回目以降のプレビューは既存ウィンドウに新規タブとして追加され、ウィンドウが増えません
 - **拡張子非依存** — `.md` だけでなく `.org` などコマンドライン引数で渡した任意のファイルを開けます
