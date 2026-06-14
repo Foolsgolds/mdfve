@@ -700,6 +700,8 @@ async function handleCloseTab(tabId: string) {
 async function handleNewFile() {
   const newTab = createTab();
   await switchTab(newTab.id);
+  // 新規ファイルは空なのでエディタのみ表示
+  setViewMode("editor");
 }
 
 // 指定パスのファイルをタブで開く (外部起動: emacs 連携などから利用)
@@ -712,6 +714,9 @@ async function openFilePath(path: string, preloadedContent?: string) {
   if (content.startsWith("﻿")) {
     content = content.slice(1);
   }
+
+  // 内容があるファイルはプレビューのみ、空ファイルはエディタのみ表示
+  const targetMode: ViewMode = content.trim() !== "" ? "preview" : "editor";
 
   const existingTab = tabs.find(t => t.filePath === path);
   if (existingTab) {
@@ -726,6 +731,7 @@ async function openFilePath(path: string, preloadedContent?: string) {
     }
     await switchTab(existingTab.id);
     renderTabs();
+    setViewMode(targetMode);
     return;
   }
 
@@ -746,6 +752,8 @@ async function openFilePath(path: string, preloadedContent?: string) {
     const newTab = createTab(path, content);
     await switchTab(newTab.id);
   }
+
+  setViewMode(targetMode);
 }
 
 async function handleOpenFile() {
@@ -891,6 +899,33 @@ function setupSyncScroll() {
 }
 
 // ==========================================
+// 表示モード切替 (エディタ / 分割 / プレビュー)
+// ==========================================
+type ViewMode = "editor" | "split" | "preview";
+
+function setViewMode(mode: ViewMode) {
+  const btnEditor = document.getElementById("btn-view-editor");
+  const btnSplit = document.getElementById("btn-view-split");
+  const btnPreview = document.getElementById("btn-view-preview");
+
+  workspaceEl.classList.remove("mode-editor", "mode-preview");
+  btnEditor?.classList.remove("active");
+  btnSplit?.classList.remove("active");
+  btnPreview?.classList.remove("active");
+
+  if (mode === "editor") {
+    workspaceEl.classList.add("mode-editor");
+    btnEditor?.classList.add("active");
+  } else if (mode === "preview") {
+    workspaceEl.classList.add("mode-preview");
+    btnPreview?.classList.add("active");
+  } else {
+    // split モード
+    btnSplit?.classList.add("active");
+  }
+}
+
+// ==========================================
 // イベントハンドラ ＆ UI 初期化
 // ==========================================
 function setupUI() {
@@ -983,24 +1018,6 @@ function setupUI() {
   const btnSplit = document.getElementById("btn-view-split")!;
   const btnPreview = document.getElementById("btn-view-preview")!;
 
-  const setViewMode = (mode: "editor" | "split" | "preview") => {
-    workspaceEl.classList.remove("mode-editor", "mode-preview");
-    btnEditor.classList.remove("active");
-    btnSplit.classList.remove("active");
-    btnPreview.classList.remove("active");
-
-    if (mode === "editor") {
-      workspaceEl.classList.add("mode-editor");
-      btnEditor.classList.add("active");
-    } else if (mode === "preview") {
-      workspaceEl.classList.add("mode-preview");
-      btnPreview.classList.add("active");
-    } else {
-      // split モード
-      btnSplit.classList.add("active");
-    }
-  };
-
   btnEditor.addEventListener("click", () => {
     setViewMode("editor");
   });
@@ -1010,9 +1027,9 @@ function setupUI() {
   btnPreview.addEventListener("click", () => {
     setViewMode("preview");
   });
-  
-  // 初期表示は分割表示
-  setViewMode("split");
+
+  // 初期表示は新規ファイル (空) なのでエディタのみ
+  setViewMode("editor");
 
   // 目次の表示/非表示
   const setOutlineVisibility = (visible: boolean) => {
