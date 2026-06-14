@@ -18,9 +18,11 @@
 
 (defcustom mdfve-executable
   ;; 開発ビルドの実行ファイル。
-  ;;   - dev:     src-tauri/target/debug/tauri-app.exe
-  ;;   - release: src-tauri/target/release/MDFVE.exe (tauri build 後)
-  "C:/Users/yanqi/prj/mdfve/src-tauri/target/debug/tauri-app.exe"
+  ;; 開発ビルド (target/debug) は vite 開発サーバーが必要なため、
+  ;; emacs 連携には npm run tauri build で作るスタンドアロン版を使うこと。
+  ;;   - スタンドアロン: src-tauri/target/release/tauri-app.exe
+  ;;   - インストーラ導入後: C:/Program Files/MDFVE/MDFVE.exe
+  "C:/Users/yanqi/prj/mdfve/src-tauri/target/release/tauri-app.exe"
   "Path to the MDFVE executable."
   :type 'string
   :group 'mdfve)
