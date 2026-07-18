@@ -1000,6 +1000,11 @@ function setupUI() {
   const icoSaveAs = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>`;
   // 再読み込みアイコン(refresh-cw)。ボタン面が 44px なので 18px。currentColor でテーマ/hover 追従。
   const icoReload = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+  // ドックのトリガー面アイコン(feather 系, 18px, currentColor でテーマ/hover 追従)
+  const icoDockFile = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
+  const icoDockView = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  const icoDockWidth = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg>`;
+  const icoDockTheme = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
 
   const dockItems: DockItem[] = [
     {
@@ -1013,7 +1018,7 @@ function setupUI() {
     },
     {
       id: "file",
-      label: "F",
+      label: icoDockFile,
       title: "ファイル操作 (F)",
       popup: [
         { icon: icoNew, label: "新規作成 (Ctrl+N)", onSelect: () => handleNewFile() },
@@ -1024,7 +1029,7 @@ function setupUI() {
     },
     {
       id: "view",
-      label: "V",
+      label: icoDockView,
       title: "表示設定 (V)",
       popup: {
         section: "表示モード",
@@ -1037,7 +1042,7 @@ function setupUI() {
     },
     {
       id: "width",
-      label: "W",
+      label: icoDockWidth,
       title: "表示幅設定 (W)",
       popup: {
         section: "プレビュー幅",
@@ -1050,7 +1055,7 @@ function setupUI() {
     },
     {
       id: "theme",
-      label: "T",
+      label: icoDockTheme,
       title: "テーマ設定 (T)",
       popup: [
         { icon: swatch("#ffffff"), label: "ライトテーマ", active: () => currentTheme === "theme-light", onSelect: () => applyTheme("theme-light", "ライトテーマ") },
