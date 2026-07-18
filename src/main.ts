@@ -71,6 +71,10 @@ let btnFloatingOutlineEl: HTMLElement;
 let btnCloseSidebarEl: HTMLElement;
 let btnCloseSidebarBottomEl: HTMLElement;
 
+// コンテンツエリア(エディタ+プレビュー)の表示倍率。Ctrl+ホイールで変更する。
+let contentZoom = 1;
+let contentZoomEl: HTMLElement;
+
 // コマンドドック本体と、その popup の active 表示を駆動する現在状態。
 let commandDock: CommandDock | null = null;
 let currentViewMode: ViewMode = "editor";
@@ -960,6 +964,18 @@ function setViewMode(mode: ViewMode) {
 }
 
 // ==========================================
+// コンテンツエリアの表示倍率 (Ctrl+ホイール / Ctrl+0)
+// ==========================================
+// px 指定の見出し・コード等も一様に拡縮するため、font-size ではなく
+// CSS の zoom をエディタ/プレビューに適用する(ブラウザズームと同じ感覚)。
+function setContentZoom(zoom: number) {
+  contentZoom = Math.min(3, Math.max(0.5, Math.round(zoom * 10) / 10));
+  editorEl.style.setProperty("zoom", String(contentZoom));
+  previewEl.style.setProperty("zoom", String(contentZoom));
+  contentZoomEl.textContent = `${Math.round(contentZoom * 100)}%`;
+}
+
+// ==========================================
 // イベントハンドラ ＆ UI 初期化
 // ==========================================
 function setupUI() {
@@ -1101,6 +1117,16 @@ function setupUI() {
   setPreviewWidth("standard");
   applyTheme("theme-light", "ライトテーマ");
 
+  // Ctrl+ホイールでコンテンツエリアの表示倍率を変更(素のホイールはスクロールのまま)。
+  // preventDefault で WebView2 既定のページズームを抑止するため passive:false。
+  const onZoomWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setContentZoom(contentZoom + (e.deltaY < 0 ? 0.1 : -0.1));
+  };
+  editorPaneEl.addEventListener("wheel", onZoomWheel, { passive: false });
+  previewPaneEl.addEventListener("wheel", onZoomWheel, { passive: false });
+
   // ドラッグリサイズバーの実装
   const dragBar = document.getElementById("drag-bar")!;
   dragBar.addEventListener("mousedown", (e) => {
@@ -1149,6 +1175,10 @@ function setupUI() {
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       handleSaveFile();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+      // コンテンツエリアの表示倍率をリセット
+      e.preventDefault();
+      setContentZoom(1);
     }
   });
 
@@ -1195,6 +1225,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   readTimeEl = document.getElementById("read-time")!;
   autosaveStatusEl = document.getElementById("autosave-status")!;
   activeThemeEl = document.getElementById("active-theme")!;
+  contentZoomEl = document.getElementById("content-zoom")!;
   outlineSidebarEl = document.getElementById("outline-sidebar")!;
   outlineListEl = document.getElementById("outline-list")!;
   workspaceEl = document.querySelector(".workspace")!;
