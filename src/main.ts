@@ -1,10 +1,16 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save, confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { marked } from "marked";
 import Prism from "prismjs";
+
+// 下部中央のコマンドドック(独立パッケージ command-dock)。
+// 副作用 import で <command-dock> をカスタム要素として登録する。型としてしか
+// 使わないと本番ビルドで tree-shake され登録が消えるため、登録は必ず副作用 import で行う。
+import "command-dock";
+import type { CommandDock, DockItem } from "command-dock";
 
 // Prism の主要な言語ハイライト定義を読み込む
 import "prismjs/components/prism-javascript";
@@ -64,6 +70,12 @@ let workspaceEl: HTMLElement;
 let btnFloatingOutlineEl: HTMLElement;
 let btnCloseSidebarEl: HTMLElement;
 let btnCloseSidebarBottomEl: HTMLElement;
+
+// コマンドドック本体と、その popup の active 表示を駆動する現在状態。
+let commandDock: CommandDock | null = null;
+let currentViewMode: ViewMode = "editor";
+let currentWidth: "standard" | "wide" | "full" = "standard";
+let currentTheme = "theme-light";
 
 // ==========================================
 // Markdown レンダリング ＆ 統計情報更新
@@ -540,6 +552,9 @@ function renderTabs() {
 
     tabBar.appendChild(tabEl);
   });
+
+  // アクティブなファイルの有無が変わったので、再読込ボタン(R)の disabled を再評価。
+  commandDock?.refresh();
 }
 
 async function switchTab(tabId: string) {
@@ -756,6 +771,32 @@ async function openFilePath(path: string, preloadedContent?: string) {
   setViewMode(targetMode);
 }
 
+// アクティブなファイルをディスクから再読み込みして再描画する(ActionDockItem 用)。
+// 未保存の変更があれば破棄確認する。新規/未保存ファイルは対象外。
+async function handleReloadFile() {
+  if (!currentFilePath) return;
+
+  if (isDirty) {
+    const ok = await confirm(
+      "未保存の変更があります。破棄してディスクから再読み込みしますか?",
+      { title: "再読み込み", kind: "warning" },
+    );
+    if (!ok) return;
+  }
+
+  let content = await readTextFile(currentFilePath);
+  if (content.startsWith("﻿")) {
+    content = content.slice(1);
+  }
+
+  editorEl.value = content;
+  await renderMarkdown();
+  updateStats();
+  markAsDirty(false);
+  syncGlobalsToActiveTabState();
+  renderTabs();
+}
+
 async function handleOpenFile() {
   try {
     const selected = await open({
@@ -904,132 +945,128 @@ function setupSyncScroll() {
 type ViewMode = "editor" | "split" | "preview";
 
 function setViewMode(mode: ViewMode) {
-  const btnEditor = document.getElementById("btn-view-editor");
-  const btnSplit = document.getElementById("btn-view-split");
-  const btnPreview = document.getElementById("btn-view-preview");
-
+  currentViewMode = mode;
   workspaceEl.classList.remove("mode-editor", "mode-preview");
-  btnEditor?.classList.remove("active");
-  btnSplit?.classList.remove("active");
-  btnPreview?.classList.remove("active");
 
   if (mode === "editor") {
     workspaceEl.classList.add("mode-editor");
-    btnEditor?.classList.add("active");
   } else if (mode === "preview") {
     workspaceEl.classList.add("mode-preview");
-    btnPreview?.classList.add("active");
-  } else {
-    // split モード
-    btnSplit?.classList.add("active");
   }
+  // split モードは workspace クラスなし
+
+  // ドックの popup を開いていれば active 表示を更新
+  commandDock?.refresh();
 }
 
 // ==========================================
 // イベントハンドラ ＆ UI 初期化
 // ==========================================
 function setupUI() {
-  // フローティングポップアップメニューの表示制御
-  const btnMenuFile = document.getElementById("btn-menu-file")!;
-  const btnMenuView = document.getElementById("btn-menu-view")!;
-  const btnMenuWidth = document.getElementById("btn-menu-width")!;
-  const btnMenuTheme = document.getElementById("btn-menu-theme")!;
+  // ====== 下部中央のコマンドドック (F/V/W/T) ======
+  // 開閉/外クリック/自動クローズの挙動は <command-dock> が内蔵する。
+  // ここでは中身(項目・ハンドラ)を宣言的に渡すだけ。
 
-  const popupFile = document.getElementById("popup-file")!;
-  const popupView = document.getElementById("popup-view")!;
-  const popupWidth = document.getElementById("popup-width")!;
-  const popupTheme = document.getElementById("popup-theme")!;
-
-  const closeAllPopups = () => {
-    popupFile.classList.add("hidden");
-    popupView.classList.add("hidden");
-    popupWidth.classList.add("hidden");
-    popupTheme.classList.add("hidden");
-
-    btnMenuFile.classList.remove("active");
-    btnMenuView.classList.remove("active");
-    btnMenuWidth.classList.remove("active");
-    btnMenuTheme.classList.remove("active");
+  // 表示幅 (W) の適用
+  const setPreviewWidth = (width: "standard" | "wide" | "full") => {
+    currentWidth = width;
+    previewEl.classList.remove("wide-preview", "full-preview");
+    if (width === "wide") previewEl.classList.add("wide-preview");
+    else if (width === "full") previewEl.classList.add("full-preview");
+    commandDock?.refresh();
   };
 
-  const togglePopup = (popup: HTMLElement, btn: HTMLElement) => {
-    const isHidden = popup.classList.contains("hidden");
-    closeAllPopups();
-    if (isHidden) {
-      popup.classList.remove("hidden");
-      btn.classList.add("active");
-    }
-  };
-
-  btnMenuFile.addEventListener("click", (e) => {
-    e.stopPropagation();
-    togglePopup(popupFile, btnMenuFile);
-  });
-
-  btnMenuView.addEventListener("click", (e) => {
-    e.stopPropagation();
-    togglePopup(popupView, btnMenuView);
-  });
-
-  btnMenuWidth.addEventListener("click", (e) => {
-    e.stopPropagation();
-    togglePopup(popupWidth, btnMenuWidth);
-  });
-
-  btnMenuTheme.addEventListener("click", (e) => {
-    e.stopPropagation();
-    togglePopup(popupTheme, btnMenuTheme);
-  });
-
-  // ポップアップ自体のクリックで閉じないように制御
-  popupFile.addEventListener("click", (e) => e.stopPropagation());
-  popupView.addEventListener("click", (e) => e.stopPropagation());
-  popupWidth.addEventListener("click", (e) => e.stopPropagation());
-  popupTheme.addEventListener("click", (e) => e.stopPropagation());
-
-  // 画面全体のクリックでポップアップを閉じる
-  document.addEventListener("click", () => {
-    closeAllPopups();
-  });
-
-  // 各ポップアップ内アイテムがクリックされたらポップアップを閉じる (トグルボタン以外)
-  const popupItems = document.querySelectorAll(".popup-item");
-  popupItems.forEach(item => {
-    if (item.id === "btn-toggle-outline") {
-      return;
-    }
-    item.addEventListener("click", () => {
-      setTimeout(closeAllPopups, 120);
+  // テーマ (T) の適用
+  const applyTheme = (themeClass: string, label: string) => {
+    currentTheme = themeClass;
+    const host = workspaceEl.parentElement;
+    Array.from(host?.classList || []).forEach((c) => {
+      if (c.startsWith("theme-")) host?.classList.remove(c);
     });
-  });
+    host?.classList.add(themeClass);
+    activeThemeEl.textContent = label;
+    commandDock?.refresh();
+  };
 
-  // ツールバーボタンイベント & タブ関連イベント
-  document.getElementById("btn-new")?.addEventListener("click", handleNewFile);
-  document.getElementById("btn-open")?.addEventListener("click", handleOpenFile);
-  document.getElementById("btn-save")?.addEventListener("click", handleSaveFile);
-  document.getElementById("btn-saveas")?.addEventListener("click", handleSaveAsFile);
+  // テーマ色プレビューの丸アイコン (Shadow DOM 内なのでインラインスタイルで渡す)
+  const swatch = (bg: string, border?: string) =>
+    `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;` +
+    `background:${bg};border:1px solid ${border ?? "var(--dock-border,var(--border-color,#e5e7eb))"};"></span>`;
+
+  // ファイル操作アイコン (元 index.html の SVG)
+  const icoNew = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`;
+  const icoOpen = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+  const icoSave = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`;
+  const icoSaveAs = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>`;
+  // 再読み込みアイコン(refresh-cw)。ボタン面が 44px なので 18px。currentColor でテーマ/hover 追従。
+  const icoReload = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+
+  const dockItems: DockItem[] = [
+    {
+      // 即アクション型: クリックでアクティブな .md をディスクから再読込 + 再描画。
+      // onClick が Promise を返すので、読み込み中は自動で disabled + busy 表示になる。
+      id: "reload",
+      label: icoReload,
+      title: "再読み込み (ディスクから)",
+      onClick: () => handleReloadFile(),
+      disabled: () => !currentFilePath,
+    },
+    {
+      id: "file",
+      label: "F",
+      title: "ファイル操作 (F)",
+      popup: [
+        { icon: icoNew, label: "新規作成 (Ctrl+N)", onSelect: () => handleNewFile() },
+        { icon: icoOpen, label: "ファイルを開く (Ctrl+O)", onSelect: () => handleOpenFile() },
+        { icon: icoSave, label: "上書き保存 (Ctrl+S)", onSelect: () => handleSaveFile() },
+        { icon: icoSaveAs, label: "別名で保存", title: "別名で保存 (Ctrl+Shift+S)", onSelect: () => handleSaveAsFile() },
+      ],
+    },
+    {
+      id: "view",
+      label: "V",
+      title: "表示設定 (V)",
+      popup: {
+        section: "表示モード",
+        items: [
+          { label: "エディタ", title: "エディタのみ", active: () => currentViewMode === "editor", onSelect: () => setViewMode("editor") },
+          { label: "分割表示", active: () => currentViewMode === "split", onSelect: () => setViewMode("split") },
+          { label: "プレビュー表示", title: "プレビューのみ", active: () => currentViewMode === "preview", onSelect: () => setViewMode("preview") },
+        ],
+      },
+    },
+    {
+      id: "width",
+      label: "W",
+      title: "表示幅設定 (W)",
+      popup: {
+        section: "プレビュー幅",
+        items: [
+          { label: "標準幅", title: "標準幅 (800px)", active: () => currentWidth === "standard", onSelect: () => setPreviewWidth("standard") },
+          { label: "広い幅", title: "広い幅 (1200px)", active: () => currentWidth === "wide", onSelect: () => setPreviewWidth("wide") },
+          { label: "フル幅", title: "フル幅 (100%)", active: () => currentWidth === "full", onSelect: () => setPreviewWidth("full") },
+        ],
+      },
+    },
+    {
+      id: "theme",
+      label: "T",
+      title: "テーマ設定 (T)",
+      popup: [
+        { icon: swatch("#ffffff"), label: "ライトテーマ", active: () => currentTheme === "theme-light", onSelect: () => applyTheme("theme-light", "ライトテーマ") },
+        { icon: swatch("#1a1a1e"), label: "ダークテーマ", active: () => currentTheme === "theme-dark", onSelect: () => applyTheme("theme-dark", "ダークテーマ") },
+        { icon: swatch("#fbf0d9"), label: "セピアテーマ", active: () => currentTheme === "theme-sepia", onSelect: () => applyTheme("theme-sepia", "セピアテーマ") },
+        { icon: swatch("#171821", "#ff007f"), label: "サイバーパンク", active: () => currentTheme === "theme-cyberpunk", onSelect: () => applyTheme("theme-cyberpunk", "サイバーパンク") },
+      ],
+    },
+  ];
+
+  commandDock = document.getElementById("command-dock") as CommandDock;
+  commandDock.items = dockItems;
+
+  // タブ追加ボタン & ダイアログ
   document.getElementById("btn-add-tab")?.addEventListener("click", handleNewFile);
-
-  // ダイアログのイベントセットアップ
   setupDialogEvents();
-
-  // 表示切り替えボタン
-  const btnEditor = document.getElementById("btn-view-editor")!;
-  const btnSplit = document.getElementById("btn-view-split")!;
-  const btnPreview = document.getElementById("btn-view-preview")!;
-
-  btnEditor.addEventListener("click", () => {
-    setViewMode("editor");
-  });
-  btnSplit.addEventListener("click", () => {
-    setViewMode("split");
-  });
-  btnPreview.addEventListener("click", () => {
-    setViewMode("preview");
-  });
-
-  // 初期表示は新規ファイル (空) なのでエディタのみ
-  setViewMode("editor");
 
   // 目次の表示/非表示
   const setOutlineVisibility = (visible: boolean) => {
@@ -1054,61 +1091,10 @@ function setupUI() {
     setOutlineVisibility(false);
   });
 
-  // テーマ切り替え (吹き出し内のボタン)
-  const themeOptions = document.querySelectorAll(".theme-option");
-  themeOptions.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const selectedTheme = btn.getAttribute("data-theme")!;
-      // 既存の theme- クラスを除去して追加
-      const classes = Array.from(workspaceEl.parentElement?.classList || []);
-      classes.forEach(c => {
-        if (c.startsWith("theme-")) workspaceEl.parentElement?.classList.remove(c);
-      });
-      workspaceEl.parentElement?.classList.add(selectedTheme);
-      
-      // アクティブ状態の更新
-      themeOptions.forEach(opt => opt.classList.remove("active"));
-      btn.classList.add("active");
-      
-      // ステータスバー表示の更新
-      const themeLabel = btn.querySelector("span:not(.theme-color-preview)")?.textContent || "";
-      activeThemeEl.textContent = themeLabel;
-    });
-  });
-  
-  // デフォルトテーマ適用 (ライトテーマ)
-  workspaceEl.parentElement?.classList.add("theme-light");
-  activeThemeEl.textContent = "ライトテーマ";
-  document.querySelector('.theme-option[data-theme="theme-light"]')?.classList.add("active");
-
-  // 表示幅設定 (W) の制御
-  const btnWidthStandard = document.getElementById("btn-width-standard")!;
-  const btnWidthWide = document.getElementById("btn-width-wide")!;
-  const btnWidthFull = document.getElementById("btn-width-full")!;
-
-  const setPreviewWidth = (width: "standard" | "wide" | "full") => {
-    previewEl.classList.remove("wide-preview", "full-preview");
-    btnWidthStandard.classList.remove("active");
-    btnWidthWide.classList.remove("active");
-    btnWidthFull.classList.remove("active");
-
-    if (width === "standard") {
-      btnWidthStandard.classList.add("active");
-    } else if (width === "wide") {
-      previewEl.classList.add("wide-preview");
-      btnWidthWide.classList.add("active");
-    } else if (width === "full") {
-      previewEl.classList.add("full-preview");
-      btnWidthFull.classList.add("active");
-    }
-  };
-
-  btnWidthStandard.addEventListener("click", () => setPreviewWidth("standard"));
-  btnWidthWide.addEventListener("click", () => setPreviewWidth("wide"));
-  btnWidthFull.addEventListener("click", () => setPreviewWidth("full"));
-
-  // デフォルトとして標準幅をアクティブにする
+  // 初期状態の適用 (エディタ表示 / 標準幅 / ライトテーマ)
+  setViewMode("editor");
   setPreviewWidth("standard");
+  applyTheme("theme-light", "ライトテーマ");
 
   // ドラッグリサイズバーの実装
   const dragBar = document.getElementById("drag-bar")!;
