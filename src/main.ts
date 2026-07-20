@@ -1089,6 +1089,15 @@ function setupUI() {
   document.getElementById("btn-add-tab")?.addEventListener("click", handleNewFile);
   setupDialogEvents();
 
+  // 設定パネル (歯車): クリックでコンテンツエリア全体の設定表示をトグル
+  const btnSettings = document.getElementById("btn-settings")!;
+  const settingsPanel = document.getElementById("settings-panel")!;
+  btnSettings.addEventListener("click", () => {
+    const show = settingsPanel.classList.contains("hidden");
+    settingsPanel.classList.toggle("hidden", !show);
+    btnSettings.classList.toggle("active", show);
+  });
+
   // 目次の表示/非表示
   const setOutlineVisibility = (visible: boolean) => {
     if (visible) {

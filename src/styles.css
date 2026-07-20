@@ -913,7 +913,7 @@ button:active {
   border-bottom: 1px solid var(--tab-border);
   display: flex;
   align-items: center;
-  padding-right: 8px;
+  padding: 0 8px;
   z-index: 10;
   user-select: none;
   transition: background-color 0.3s, border-color 0.3s;
@@ -1043,6 +1043,35 @@ button:active {
 .add-tab-btn:hover {
   background-color: var(--tab-hover-bg);
   color: var(--accent-color);
+}
+
+.add-tab-btn.active {
+  background-color: var(--tab-hover-bg);
+  color: var(--accent-color);
+}
+
+/* ==========================================
+   設定パネル (歯車ボタンでコンテンツエリア全体に表示)
+   ========================================== */
+/* workspace(position: relative)いっぱいに重ねる。ドック(z:100)や
+   ポップアップ(z:110)より上に置き、設定表示中はコンテンツ操作を覆う。 */
+.settings-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  background-color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-panel.hidden {
+  display: none !important;
+}
+
+.settings-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 /* ==========================================
