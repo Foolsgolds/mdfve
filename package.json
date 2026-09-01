@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run build -w @yanqirenshi/markdown.sitter && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -15,13 +18,10 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
     "command-dock": "^0.2.0",
-    "marked": "^18.0.4",
-    "prismjs": "^1.30.0"
+    "@yanqirenshi/markdown.sitter": "^0.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "@types/marked": "^5.0.2",
-    "@types/prismjs": "^1.26.6",
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
   }
