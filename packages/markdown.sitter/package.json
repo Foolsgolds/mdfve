@@ -1,0 +1,56 @@
+{
+  "name": "@yanqirenshi/markdown.sitter",
+  "version": "0.1.0",
+  "description": "Framework-agnostic Markdown viewer / editor Web Components (marked + Prism rendering, collapsible headings, split workspace with scroll sync, CSS-variable theming via Shadow DOM).",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/markdown-viewer.js",
+    "./dist/markdown-editor.js",
+    "./dist/markdown-workspace.js"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "web-component",
+    "custom-element",
+    "markdown",
+    "viewer",
+    "editor",
+    "marked",
+    "prismjs"
+  ],
+  "license": "MIT",
+  "author": "仁是 <yanqirenshi@gmail.com>",
+  "homepage": "https://github.com/Foolsgolds/mdfve/tree/main/packages/markdown.sitter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Foolsgolds/mdfve.git",
+    "directory": "packages/markdown.sitter"
+  },
+  "bugs": {
+    "url": "https://github.com/Foolsgolds/mdfve/issues"
+  },
+  "dependencies": {
+    "marked": "^18.0.4",
+    "prismjs": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/prismjs": "^1.26.6",
+    "typescript": "~5.6.2"
+  }
+}
