@@ -119,7 +119,7 @@ table {
   font-size: 14px;
 }
 th, td {
-  padding: 8px 12px;
+  padding: 2px 6px;
   border: 1px solid var(--md-border, var(--border-color, #e5e7eb));
   text-align: left;
 }
