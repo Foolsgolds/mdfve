@@ -3,8 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save, confirm } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { marked } from "marked";
-import Prism from "prismjs";
 
 // 下部中央のコマンドドック(独立パッケージ command-dock)。
 // 副作用 import で <command-dock> をカスタム要素として登録する。型としてしか
@@ -12,14 +10,11 @@ import Prism from "prismjs";
 import "command-dock";
 import type { CommandDock, DockItem } from "command-dock";
 
-// Prism の主要な言語ハイライト定義を読み込む
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-markdown";
+// Markdown のエディタ/ビューワ(独立パッケージ @yanqirenshi/markdown.sitter)。
+// marked・Prism・言語定義・折り畳み・スクロール同期はすべてこの中。
+// command-dock と同様、カスタム要素の登録は副作用 import で行う。
+import "@yanqirenshi/markdown.sitter";
+import type { MarkdownEditor, MarkdownViewer, MarkdownWorkspace } from "@yanqirenshi/markdown.sitter";
 
 // ==========================================
 // 状態管理用変数 ＆ タブ定義
@@ -30,8 +25,8 @@ interface Tab {
   title: string;
   content: string;
   isDirty: boolean;
-  editorScrollTop: number;
-  previewScrollTop: number;
+  editorScrollRatio: number;
+  previewScrollRatio: number;
   collapsedTOCHeadings: Set<string>;
   collapsedPreviewHeadings: Set<string>;
 }
@@ -52,10 +47,8 @@ const collapsedPreviewHeadings = new Set<string>();
 let closeDialogResolve: ((value: "save" | "discard" | "cancel") => void) | null = null;
 
 // DOM 要素への参照
-let editorEl: HTMLTextAreaElement;
-let previewEl: HTMLElement;
-let previewPaneEl: HTMLElement;
-let editorPaneEl: HTMLElement;
+let editorEl: MarkdownEditor;
+let previewEl: MarkdownViewer;
 let fileTitleEl: HTMLElement | null = null;
 let dirtyIndicatorEl: HTMLElement | null = null;
 let filepathDisplayEl: HTMLElement;
@@ -66,7 +59,7 @@ let autosaveStatusEl: HTMLElement;
 let activeThemeEl: HTMLElement;
 let outlineSidebarEl: HTMLElement;
 let outlineListEl: HTMLElement;
-let workspaceEl: HTMLElement;
+let workspaceEl: MarkdownWorkspace;
 let btnFloatingOutlineEl: HTMLElement;
 let btnCloseSidebarEl: HTMLElement;
 let btnCloseSidebarBottomEl: HTMLElement;
@@ -85,158 +78,21 @@ let currentTheme = "theme-light";
 // Markdown レンダリング ＆ 統計情報更新
 // ==========================================
 async function renderMarkdown() {
-  let markdownText = editorEl.value;
-  // BOM (Byte Order Mark) を除去
-  if (markdownText.startsWith("\uFEFF")) {
-    markdownText = markdownText.slice(1);
-  }
-  // marked で HTML を生成
-  const htmlContent = await marked.parse(markdownText);
-  previewEl.innerHTML = htmlContent;
-
-  // HTMLを階層構造に再構築 (折り畳み機能のため)
-  restructurePreviewDOM();
-
-  // PrismJS を用いてコードブロックをシンタックスハイライト
-  Prism.highlightAllUnder(previewEl);
-
-  // 目次（アウトライン）の更新
-  updateOutline();
+  // 変換・階層化・ハイライトは <markdown-viewer> が行う。
+  // ここは本文と折り畳み状態を渡すだけで、目次はビューワーの
+  // outlinechange (setupUI で購読) を受けて更新される。
+  previewEl.collapsedPaths = [...collapsedPreviewHeadings];
+  previewEl.markdown = editorEl.value;
 }
 
-function restructurePreviewDOM() {
-  const container = previewEl;
-  const children = Array.from(container.childNodes);
-  container.innerHTML = "";
-
-  // 階層を管理するためのスタック
-  // ルート要素（レベル0）から開始
-  const rootWrapper = document.createElement("div");
-  rootWrapper.className = "markdown-section-wrapper level-0";
-  const rootContent = document.createElement("div");
-  rootContent.className = "section-content";
-  rootWrapper.appendChild(rootContent);
-
-  interface StackItem {
-    wrapper: HTMLElement;
-    content: HTMLElement;
-    level: number;
-    title: string;
-    path: string;
-  }
-
-  const stack: StackItem[] = [
-    {
-      wrapper: rootWrapper,
-      content: rootContent,
-      level: 0,
-      title: "root",
-      path: ""
-    }
-  ];
-
-  children.forEach((child) => {
-    if (child.nodeType !== Node.ELEMENT_NODE) {
-      stack[stack.length - 1].content.appendChild(child);
-      return;
-    }
-
-    const el = child as HTMLElement;
-    const tagName = el.tagName.toLowerCase();
-    const isHeading = /^h[1-6]$/.test(tagName);
-
-    if (isHeading) {
-      const level = parseInt(tagName.substring(1), 10);
-      const title = el.textContent?.trim() || "";
-
-      // 現在のヘッダーレベルと同等以上の親をスタックからポップ
-      while (stack.length > 1 && stack[stack.length - 1].level >= level) {
-        stack.pop();
-      }
-
-      const parentItem = stack[stack.length - 1];
-      const parentPath = parentItem.path;
-      const currentPath = parentPath ? `${parentPath} > ${level}:${title}` : `${level}:${title}`;
-
-      // 新しいラッパーとコンテンツエリアの作成
-      const wrapper = document.createElement("div");
-      wrapper.className = `markdown-section-wrapper level-${level}`;
-      wrapper.dataset.path = currentPath;
-      wrapper.dataset.level = level.toString();
-
-      const content = document.createElement("div");
-      content.className = "section-content";
-
-      // ヘッダーに折り畳み用クラスを追加
-      el.classList.add("collapsible-header");
-
-      // 折り畳み用の矢印（アイコン）をヘッダーの先頭に追加
-      const chevron = document.createElement("span");
-      chevron.className = "fold-chevron";
-      chevron.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
-      el.insertBefore(chevron, el.firstChild);
-
-      // コラップ状態の復元
-      if (collapsedPreviewHeadings.has(currentPath)) {
-        wrapper.classList.add("collapsed");
-      }
-
-      // 要素を移動
-      wrapper.appendChild(el);
-      wrapper.appendChild(content);
-      parentItem.content.appendChild(wrapper);
-
-      // スタックに追加
-      stack.push({
-        wrapper,
-        content,
-        level,
-        title,
-        path: currentPath
-      });
-
-      // ヘッダーのクリックで折り畳みを切り替える
-      el.addEventListener("click", (e) => {
-        if ((e.target as HTMLElement).closest("a")) return;
-
-        // 折り畳み用矢印をクリックした場合は選択状態に関わらずトグルする
-        const isChevron = (e.target as HTMLElement).closest(".fold-chevron") !== null;
-        if (!isChevron) {
-          // テキスト選択中、またはドラッグ選択動作を行った場合はトグルしない
-          const selection = window.getSelection();
-          if (selection && selection.toString().trim() !== "") {
-            return;
-          }
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-        togglePreviewHeadingCollapse(currentPath);
-      });
-    } else {
-      // 通常の要素は現在のスタックトップのコンテンツに追加
-      stack[stack.length - 1].content.appendChild(el);
-    }
-  });
-
-  // コンテナに再構築したDOMを展開
-  while (rootContent.firstChild) {
-    container.appendChild(rootContent.firstChild);
-  }
-}
-
-function togglePreviewHeadingCollapse(path: string) {
-  if (collapsedPreviewHeadings.has(path)) {
-    collapsedPreviewHeadings.delete(path);
-  } else {
-    collapsedPreviewHeadings.add(path);
-  }
-
-  // プレビュー領域の該当するラッパー要素のコラップ状態をトグル
-  const previewWrapper = previewEl.querySelector(`.markdown-section-wrapper[data-path="${CSS.escape(path)}"]`);
-  if (previewWrapper) {
-    previewWrapper.classList.toggle("collapsed", collapsedPreviewHeadings.has(path));
-  }
+/**
+ * ビューワー側の折り畳み状態が変わったときの後処理。
+ * トグル自体は <markdown-viewer> が行い、その foldchange を受けて
+ * こちらはタブへ永続化するだけ。
+ */
+function onPreviewFoldChange(path: string, collapsed: boolean) {
+  if (collapsed) collapsedPreviewHeadings.add(path);
+  else collapsedPreviewHeadings.delete(path);
   syncGlobalsToActiveTabState();
 }
 
@@ -334,10 +190,10 @@ function updateAutoSaveStatus(state: "off" | "saving" | "saved" | "dirty") {
 // ==========================================
 function updateOutline() {
   outlineListEl.innerHTML = "";
-  
-  // プレビューのラッパー要素からすべてのヘッダーエリアを取得
-  const wrappers = previewEl.querySelectorAll(".markdown-section-wrapper");
-  if (wrappers.length === 0) {
+
+  // 見出しの抽出は <markdown-viewer> 側。ここは表示だけを組み立てる。
+  const headings = previewEl.headings;
+  if (headings.length === 0) {
     const emptyMsg = document.createElement("div");
     emptyMsg.className = "outline-item";
     emptyMsg.style.color = "var(--text-secondary)";
@@ -347,52 +203,20 @@ function updateOutline() {
     return;
   }
 
-  wrappers.forEach((wrapperNode, index) => {
-    const wrapper = wrapperNode as HTMLElement;
-    // level-0 (root) はスキップ
-    if (wrapper.classList.contains("level-0")) return;
+  for (const heading of headings) {
+    const { path, level, title, hasChildren } = heading;
 
-    const path = wrapper.dataset.path || "";
-    const level = parseInt(wrapper.dataset.level || "1", 10);
-    const header = wrapper.querySelector(".collapsible-header") as HTMLElement;
-    if (!header) return;
+    // 目次側で折り畳まれた親を持つ項目は出さない。
+    // (プレビューの折り畳みとは独立した状態であることに注意)
+    const segments = path.split(" > ");
+    const hiddenByParent = segments
+      .slice(0, -1)
+      .some((_, i) => collapsedTOCHeadings.has(segments.slice(0, i + 1).join(" > ")));
+    if (hiddenByParent) continue;
 
-    // ヘッダーテキストを取得 (シェブロンのテキストを除去)
-    const headerTextNode = Array.from(header.childNodes)
-      .find(node => node.nodeType === Node.TEXT_NODE);
-    const title = headerTextNode ? headerTextNode.textContent?.trim() || "" : "";
-
-    // ヘッダー要素にアンカー用のIDを付与 (スムーズスクロールのため)
-    const id = `heading-${index}`;
-    header.setAttribute("id", id);
-
-    // 親のいずれかが目次で折り畳まれているかチェック
-    let isHiddenByParent = false;
-    const pathSegments = path.split(" > ");
-    for (let i = 0; i < pathSegments.length - 1; i++) {
-      const parentPath = pathSegments.slice(0, i + 1).join(" > ");
-      if (collapsedTOCHeadings.has(parentPath)) {
-        isHiddenByParent = true;
-        break;
-      }
-    }
-
-    if (isHiddenByParent) {
-      // 親が折り畳まれている場合は目次項目を表示しない
-      return;
-    }
-
-    // 子（サブ見出し）を持っているか確認
-    const hasChildren = wrapper.querySelector(".markdown-section-wrapper") !== null;
-    const isCollapsed = collapsedTOCHeadings.has(path);
-    console.log(`[TOC Debug] Path: "${path}", Level: ${level}, HasChildren: ${hasChildren}`);
-
-    // 目次項目のコンテナを作成
     const itemWrapper = document.createElement("div");
     itemWrapper.className = `outline-item-container h${level}`;
-    if (isCollapsed) {
-      itemWrapper.classList.add("collapsed");
-    }
+    if (collapsedTOCHeadings.has(path)) itemWrapper.classList.add("collapsed");
 
     // 折り畳みボタン
     const foldBtn = document.createElement("span");
@@ -406,25 +230,22 @@ function updateOutline() {
       });
     } else {
       foldBtn.classList.add("empty");
-      foldBtn.innerHTML = ``;
     }
 
-    // リンク
+    // リンク (クリックで該当見出しへスムーズスクロール)
     const link = document.createElement("a");
-    link.className = `outline-item`;
+    link.className = "outline-item";
     link.textContent = title;
-    
-    // スムーズスクロール
     link.addEventListener("click", (e) => {
       e.preventDefault();
-      header.scrollIntoView({ behavior: "smooth" });
+      previewEl.scrollToHeading(path);
     });
 
-    itemWrapper.appendChild(foldBtn);
-    itemWrapper.appendChild(link);
+    itemWrapper.append(foldBtn, link);
     outlineListEl.appendChild(itemWrapper);
-  });
+  }
 }
+
 
 // ==========================================
 // ファイル入出力処理
@@ -466,8 +287,8 @@ function createTab(filePath: string | null = null, content: string = "", title: 
     title: tabTitle,
     content,
     isDirty: false,
-    editorScrollTop: 0,
-    previewScrollTop: 0,
+    editorScrollRatio: 0,
+    previewScrollRatio: 0,
     collapsedTOCHeadings: new Set<string>(),
     collapsedPreviewHeadings: new Set<string>()
   };
@@ -505,8 +326,8 @@ function syncGlobalsToActiveTabState() {
 
   activeTab.collapsedTOCHeadings = new Set(collapsedTOCHeadings);
   activeTab.collapsedPreviewHeadings = new Set(collapsedPreviewHeadings);
-  activeTab.editorScrollTop = editorEl.scrollTop;
-  activeTab.previewScrollTop = previewPaneEl.scrollTop;
+  activeTab.editorScrollRatio = editorEl.scrollRatio;
+  activeTab.previewScrollRatio = previewEl.scrollRatio;
 }
 
 function renderTabs() {
@@ -596,8 +417,8 @@ async function switchTab(tabId: string) {
   // 6. スクロール位置の復元 (レンダリング完了後)
   const targetTab = tabs.find(t => t.id === tabId);
   if (targetTab) {
-    editorEl.scrollTop = targetTab.editorScrollTop;
-    previewPaneEl.scrollTop = targetTab.previewScrollTop;
+    editorEl.scrollRatio = targetTab.editorScrollRatio;
+    previewEl.scrollRatio = targetTab.previewScrollRatio;
   }
 
   // エディタにフォーカス
@@ -708,8 +529,8 @@ async function handleCloseTab(tabId: string) {
       updateStats();
       markAsDirty(isDirty);
       
-      editorEl.scrollTop = newActiveTab.editorScrollTop;
-      previewPaneEl.scrollTop = newActiveTab.previewScrollTop;
+      editorEl.scrollRatio = newActiveTab.editorScrollRatio;
+      previewEl.scrollRatio = newActiveTab.previewScrollRatio;
     }
   }
 
@@ -903,45 +724,6 @@ async function handleSaveAsFile() {
   }
 }
 
-// ==========================================
-// 同期スクロールロジック
-// ==========================================
-let isScrollingEditor = false;
-let isScrollingPreview = false;
-
-function setupSyncScroll() {
-  editorEl.addEventListener("scroll", () => {
-    if (isScrollingPreview) {
-      isScrollingPreview = false;
-      return;
-    }
-    isScrollingEditor = true;
-    
-    // スクロール比率を計算
-    const scrollRange = editorEl.scrollHeight - editorEl.clientHeight;
-    if (scrollRange > 0) {
-      const percentage = editorEl.scrollTop / scrollRange;
-      const previewScrollRange = previewPaneEl.scrollHeight - previewPaneEl.clientHeight;
-      previewPaneEl.scrollTop = percentage * previewScrollRange;
-    }
-  });
-
-  previewPaneEl.addEventListener("scroll", () => {
-    if (isScrollingEditor) {
-      isScrollingEditor = false;
-      return;
-    }
-    isScrollingPreview = true;
-    
-    // スクロール比率を計算
-    const scrollRange = previewPaneEl.scrollHeight - previewPaneEl.clientHeight;
-    if (scrollRange > 0) {
-      const percentage = previewPaneEl.scrollTop / scrollRange;
-      const editorScrollRange = editorEl.scrollHeight - editorEl.clientHeight;
-      editorEl.scrollTop = percentage * editorScrollRange;
-    }
-  });
-}
 
 // ==========================================
 // 表示モード切替 (エディタ / 分割 / プレビュー)
@@ -950,14 +732,8 @@ type ViewMode = "editor" | "split" | "preview";
 
 function setViewMode(mode: ViewMode) {
   currentViewMode = mode;
-  workspaceEl.classList.remove("mode-editor", "mode-preview");
-
-  if (mode === "editor") {
-    workspaceEl.classList.add("mode-editor");
-  } else if (mode === "preview") {
-    workspaceEl.classList.add("mode-preview");
-  }
-  // split モードは workspace クラスなし
+  // レイアウトの実体は <markdown-workspace> の mode 属性が持つ。
+  workspaceEl.mode = mode;
 
   // ドックの popup を開いていれば active 表示を更新
   commandDock?.refresh();
@@ -969,9 +745,10 @@ function setViewMode(mode: ViewMode) {
 // px 指定の見出し・コード等も一様に拡縮するため、font-size ではなく
 // CSS の zoom をエディタ/プレビューに適用する(ブラウザズームと同じ感覚)。
 function setContentZoom(zoom: number) {
-  contentZoom = Math.min(3, Math.max(0.5, Math.round(zoom * 10) / 10));
-  editorEl.style.setProperty("zoom", String(contentZoom));
-  previewEl.style.setProperty("zoom", String(contentZoom));
+  // 実際の拡縮とクランプは <markdown-workspace> 側。
+  // Ctrl+ホイールも workspace が拾い、zoomchange で戻ってくる。
+  workspaceEl.zoom = zoom;
+  contentZoom = workspaceEl.zoom;
   contentZoomEl.textContent = `${Math.round(contentZoom * 100)}%`;
 }
 
@@ -986,20 +763,28 @@ function setupUI() {
   // 表示幅 (W) の適用
   const setPreviewWidth = (width: "standard" | "wide" | "full") => {
     currentWidth = width;
-    previewEl.classList.remove("wide-preview", "full-preview");
-    if (width === "wide") previewEl.classList.add("wide-preview");
-    else if (width === "full") previewEl.classList.add("full-preview");
+    // 本文幅はビューワーの CSS 変数契約で渡す (Shadow DOM を貫通する)。
+    previewEl.style.setProperty(
+      "--md-max-width",
+      width === "wide" ? "1200px" : width === "full" ? "100%" : "800px"
+    );
+    previewEl.style.setProperty(
+      "--md-padding",
+      width === "full" ? "32px 64px" : "32px 40px"
+    );
     commandDock?.refresh();
   };
 
   // テーマ (T) の適用
   const applyTheme = (themeClass: string, label: string) => {
     currentTheme = themeClass;
-    const host = workspaceEl.parentElement;
-    Array.from(host?.classList || []).forEach((c) => {
-      if (c.startsWith("theme-")) host?.classList.remove(c);
+    // テーマ変数は #app に載せる。ここから下は CSS 変数の継承で、
+    // Shadow DOM 内の markdown.sitter にもそのまま届く。
+    const host = document.getElementById("app")!;
+    Array.from(host.classList).forEach((c) => {
+      if (c.startsWith("theme-")) host.classList.remove(c);
     });
-    host?.classList.add(themeClass);
+    host.classList.add(themeClass);
     activeThemeEl.textContent = label;
     commandDock?.refresh();
   };
@@ -1126,49 +911,25 @@ function setupUI() {
   setPreviewWidth("standard");
   applyTheme("theme-light", "ライトテーマ");
 
-  // Ctrl+ホイールでコンテンツエリアの表示倍率を変更(素のホイールはスクロールのまま)。
-  // preventDefault で WebView2 既定のページズームを抑止するため passive:false。
-  const onZoomWheel = (e: WheelEvent) => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    setContentZoom(contentZoom + (e.deltaY < 0 ? 0.1 : -0.1));
-  };
-  editorPaneEl.addEventListener("wheel", onZoomWheel, { passive: false });
-  previewPaneEl.addEventListener("wheel", onZoomWheel, { passive: false });
-
-  // ドラッグリサイズバーの実装
-  const dragBar = document.getElementById("drag-bar")!;
-  dragBar.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    dragBar.classList.add("dragging");
-
-    const doDrag = (moveEvent: MouseEvent) => {
-      const workspaceRect = workspaceEl.getBoundingClientRect();
-      const sidebarWidth = outlineSidebarEl.classList.contains("hidden") ? 0 : 260;
-      
-      const relativeX = moveEvent.clientX - workspaceRect.left - sidebarWidth;
-      const totalWidth = workspaceRect.width - sidebarWidth - 6; // 6px はドラッグバー幅
-      
-      if (totalWidth > 0) {
-        let percentage = (relativeX / totalWidth) * 100;
-        // 限界値を設定
-        if (percentage < 15) percentage = 15;
-        if (percentage > 85) percentage = 85;
-
-        editorPaneEl.style.flex = "none";
-        editorPaneEl.style.width = `${percentage}%`;
-      }
-    };
-
-    const stopDrag = () => {
-      dragBar.classList.remove("dragging");
-      window.removeEventListener("mousemove", doDrag);
-      window.removeEventListener("mouseup", stopDrag);
-    };
-
-    window.addEventListener("mousemove", doDrag);
-    window.addEventListener("mouseup", stopDrag);
+  // Ctrl+ホイールのズームと分割幅のドラッグは <markdown-workspace> が内蔵する。
+  // ここは結果を受け取ってステータスバー表示に反映するだけ。
+  workspaceEl.addEventListener("zoomchange", (e) => {
+    contentZoom = (e as CustomEvent<{ zoom: number }>).detail.zoom;
+    contentZoomEl.textContent = `${Math.round(contentZoom * 100)}%`;
   });
+
+  // 描画が終わるたびにビューワーが見出しを流してくるので、目次を組み直す。
+  previewEl.addEventListener("outlinechange", () => {
+    updateOutline();
+  });
+
+  // プレビュー側の折り畳みはビューワーが処理する。結果だけタブへ永続化する。
+  previewEl.addEventListener("foldchange", (e) => {
+    const { path, collapsed } = (e as CustomEvent<{ path: string; collapsed: boolean }>).detail;
+    onPreviewFoldChange(path, collapsed);
+  });
+
+
 
   // キーボードショートカット
   window.addEventListener("keydown", (e) => {
@@ -1222,10 +983,9 @@ function setupUI() {
 // アプリケーションロード時の初期処理
 window.addEventListener("DOMContentLoaded", async () => {
   // DOM の関連付け
-  editorEl = document.getElementById("editor") as HTMLTextAreaElement;
-  previewEl = document.getElementById("preview")!;
-  previewPaneEl = document.getElementById("preview-pane")!;
-  editorPaneEl = document.getElementById("editor-pane")!;
+  editorEl = document.getElementById("editor") as MarkdownEditor;
+  previewEl = document.getElementById("preview") as MarkdownViewer;
+  workspaceEl = document.getElementById("workspace") as MarkdownWorkspace;
   fileTitleEl = document.getElementById("file-title");
   dirtyIndicatorEl = document.getElementById("dirty-indicator");
   filepathDisplayEl = document.getElementById("filepath-display")!;
@@ -1237,14 +997,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   contentZoomEl = document.getElementById("content-zoom")!;
   outlineSidebarEl = document.getElementById("outline-sidebar")!;
   outlineListEl = document.getElementById("outline-list")!;
-  workspaceEl = document.querySelector(".workspace")!;
   btnFloatingOutlineEl = document.getElementById("btn-floating-outline")!;
   btnCloseSidebarEl = document.getElementById("btn-close-sidebar")!;
   btnCloseSidebarBottomEl = document.getElementById("btn-close-sidebar-bottom")!;
 
-  // UI セットアップ
+  // UI セットアップ (スクロール同期は <markdown-workspace> が内蔵)
   setupUI();
-  setupSyncScroll();
 
   // 初期タブを作成
   const initialTab = createTab();

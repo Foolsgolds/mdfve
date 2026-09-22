@@ -56,20 +56,16 @@
           </div>
         </aside>
 
-        <!-- エディタパネル -->
-        <div class="editor-pane" id="editor-pane">
-          <textarea id="editor" placeholder="ここに Markdown を入力してください..." spellcheck="false"></textarea>
-        </div>
-
-        <!-- ドラッグ用バー (分割幅リサイザー) -->
-        <div class="resizer" id="drag-bar"></div>
-
-        <!-- プレビューパネル -->
-        <div class="preview-pane" id="preview-pane">
-          <div id="preview" class="markdown-body">
-            <!-- レンダリングされた Markdown が入ります -->
-          </div>
-        </div>
+        <!-- エディタ + プレビュー (markdown.sitter)。
+             分割幅・スクロール同期・Ctrl+ホイールズームは workspace が担う。 -->
+        <markdown-workspace id="workspace" mode="editor">
+          <markdown-editor
+            slot="editor"
+            id="editor"
+            placeholder="ここに Markdown を入力してください..."
+          ></markdown-editor>
+          <markdown-viewer slot="preview" id="preview" foldable></markdown-viewer>
+        </markdown-workspace>
 
         <!-- 設定パネル (歯車ボタンでコンテンツエリア全体に表示。中身は今後実装) -->
         <div id="settings-panel" class="settings-panel hidden">
