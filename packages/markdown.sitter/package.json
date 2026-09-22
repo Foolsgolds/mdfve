@@ -1,6 +1,6 @@
 {
   "name": "@yanqirenshi/markdown.sitter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic Markdown viewer / editor Web Components (marked + Prism rendering, collapsible headings, split workspace with scroll sync, CSS-variable theming via Shadow DOM).",
   "type": "module",
   "files": [
