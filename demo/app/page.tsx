@@ -59,7 +59,9 @@ export default function Page() {
         <section className="demo-section">
           <div className="section-inner">
             <div className="section-header">
-              <h2>ライブデモ</h2>
+              <h2>
+                <Link href="/livedemo" className="livedemo-title-link">ライブデモ</Link>
+              </h2>
               <p>エディタを直接編集して、Markdown のレンダリングをリアルタイムで確認できます。</p>
             </div>
             <DemoWorkspace />

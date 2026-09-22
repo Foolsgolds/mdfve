@@ -215,7 +215,7 @@ export class MarkdownViewer extends HTMLElement {
       chevron.innerHTML = CHEVRON_SVG;
       el.insertBefore(chevron, el.firstChild);
 
-      if (foldable) el.addEventListener("click", (e) => this.onHeaderClick(e, path));
+      if (foldable) chevron.addEventListener("click", (e) => this.onHeaderClick(e, path));
 
       wrapper.append(el, content);
       parent.content.appendChild(wrapper);
@@ -225,17 +225,8 @@ export class MarkdownViewer extends HTMLElement {
     while (rootContent.firstChild) this.bodyEl.appendChild(rootContent.firstChild);
   }
 
-  /** 見出しクリックの扱い。リンクとテキスト選択を折り畳みより優先する。 */
+  /** 見出しシェブロンクリックの扱い。シェブロンのみがトリガーになる。 */
   private onHeaderClick(e: MouseEvent, path: string) {
-    const target = e.target as HTMLElement;
-    if (target.closest("a")) return;
-
-    // シェブロン以外をクリックしたときは、テキスト選択中ならトグルしない。
-    if (!target.closest(".fold-chevron")) {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim() !== "") return;
-    }
-
     e.preventDefault();
     e.stopPropagation();
     this.toggleFold(path);

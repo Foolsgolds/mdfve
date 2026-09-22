@@ -158,7 +158,6 @@ img { max-width: 100%; }
 .collapsible-header {
   display: flex;
   align-items: center;
-  cursor: pointer;
   position: relative;
   user-select: text;
   width: 100%;
@@ -174,6 +173,7 @@ img { max-width: 100%; }
   color: var(--md-fg-muted, var(--text-secondary, #64748b));
   transition: transform 0.2s ease, color 0.2s;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .collapsible-header:hover .fold-chevron {
   color: var(--md-link, var(--accent-color, #2563eb));
@@ -190,8 +190,7 @@ img { max-width: 100%; }
   transform: rotate(0deg);
 }
 
-/* foldable=false のときはシェブロンを出さずクリックも殺す。 */
-:host(:not([foldable])) .collapsible-header { cursor: auto; }
+/* foldable=false のときはシェブロンを非表示にする。 */
 :host(:not([foldable])) .fold-chevron { display: none; }
 :host(:not([foldable])) .section-content { padding-left: 0; }
 
