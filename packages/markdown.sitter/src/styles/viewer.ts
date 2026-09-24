@@ -113,7 +113,8 @@ pre code {
 
 /* ---------- テーブル ---------- */
 table {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   border-collapse: collapse;
   margin-bottom: 16px;
   font-size: 14px;
