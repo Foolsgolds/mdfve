@@ -44,7 +44,7 @@ export class MarkdownViewer extends HTMLElement {
   private generation = 0;
 
   /** Markdown → HTML の変換器。差し替え可能。既定は marked。 */
-  parser: MarkdownParser = (md) => marked.parse(md) as string | Promise<string>;
+  parser: MarkdownParser = (md) => marked.parse(md, { breaks: true }) as string | Promise<string>;
 
   /**
    * 生成した HTML を挿入前に通すフック。既定は素通し。
