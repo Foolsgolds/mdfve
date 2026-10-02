@@ -3,14 +3,14 @@
 import "prismjs";
 
 // 同梱する言語定義。ここに無い言語はアプリ側で
-// `import "prismjs/components/prism-xxx"` を足せば同じ Prism に登録される。
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-markdown";
+// `import "prismjs/components/prism-xxx.js"` を足せば同じ Prism に登録される。
+import "prismjs/components/prism-javascript.js";
+import "prismjs/components/prism-typescript.js";
+import "prismjs/components/prism-css.js";
+import "prismjs/components/prism-rust.js";
+import "prismjs/components/prism-json.js";
+import "prismjs/components/prism-bash.js";
+import "prismjs/components/prism-markdown.js";
 
 import "./markdown-viewer.js";
 import "./markdown-editor.js";

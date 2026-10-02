@@ -142,7 +142,7 @@ markdown。追加したい言語はアプリ側で読み込めば、同じ Prism
 
 ```js
 import "@yanqirenshi/markdown.sitter";
-import "prismjs/components/prism-python";
+import "prismjs/components/prism-python.js";
 ```
 
 ## 注意: サニタイズ
