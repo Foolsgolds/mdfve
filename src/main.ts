@@ -71,7 +71,7 @@ let contentZoomEl: HTMLElement;
 // コマンドドック本体と、その popup の active 表示を駆動する現在状態。
 let commandDock: CommandDock | null = null;
 let currentViewMode: ViewMode = "editor";
-let currentWidth: "standard" | "wide" | "full" = "standard";
+let currentWidth: "standard" | "wide" | "full" = "full";
 let currentTheme = "theme-light";
 
 // ==========================================
@@ -906,9 +906,9 @@ function setupUI() {
     setOutlineVisibility(false);
   });
 
-  // 初期状態の適用 (エディタ表示 / 標準幅 / ライトテーマ)
+  // 初期状態の適用 (エディタ表示 / フル幅 / ライトテーマ)
   setViewMode("editor");
-  setPreviewWidth("standard");
+  setPreviewWidth("full");
   applyTheme("theme-light", "ライトテーマ");
 
   // Ctrl+ホイールのズームと分割幅のドラッグは <markdown-workspace> が内蔵する。
